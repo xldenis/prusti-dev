@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "prusti",
+    "prusti-contracts",
+    "prusti-contracts-impl",
+    "prusti-contracts-internal",
+    "prusti-specs",
+    "prusti-env-utils",
+    "prusti-macros",
+    "prusti-common",
+    "prusti-interface",
+    "prusti-viper",
+    "prusti-filter",
+    "viper",
+    "viper-sys",
+]
+
+exclude = [
+    "prusti-contracts-test",
+]
