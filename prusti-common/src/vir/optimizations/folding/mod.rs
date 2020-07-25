@@ -4,8 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-//! Fix the potentially broken encoding.
+//! A module that contains optimizations related to fold/unfold.
 
-pub use self::ghost_vars::fix_ghost_vars;
+mod expressions;
 
-mod ghost_vars;
+pub use self::expressions::FoldingOptimizer;

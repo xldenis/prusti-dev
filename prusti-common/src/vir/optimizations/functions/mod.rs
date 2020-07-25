@@ -4,8 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-//! Fix the potentially broken encoding.
+//! A module that contains optimizations for functions.
 
-pub use self::ghost_vars::fix_ghost_vars;
+mod inliner;
+mod simplifier;
 
-mod ghost_vars;
+pub use self::inliner::inline_constant_functions;
+pub use self::simplifier::Simplifier;
