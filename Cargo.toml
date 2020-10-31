@@ -1,22 +1,10 @@
 [workspace]
 members = [
-    "analysis",
-    "prusti",
     "prusti-contracts",
     "prusti-contracts-impl",
     "prusti-contracts-internal",
     "prusti-specs",
-    "prusti-tests",
     "prusti-common",
-    "prusti-interface",
-    "prusti-viper",
-    "prusti-server",
-    "prusti-launch",
-    "test-crates",
-    "viper",
-    "viper-sys",
-    "jni-gen",
-	"jni-gen/systest",
 ]
 
 exclude = [
