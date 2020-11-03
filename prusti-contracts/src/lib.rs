@@ -79,4 +79,12 @@ pub fn old<T>(arg: T) -> T {
     arg
 }
 
+pub fn current<T>(arg: T) -> T {
+    arg
+}
+
+pub fn final<T>(arg: T) -> T {
+    arg
+}
+
 pub use private::*;
