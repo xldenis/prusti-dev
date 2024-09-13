@@ -1,7 +1,6 @@
 #![deny(unused_must_use)]
-#![feature(drain_filter)]
+#![feature(extract_if)]
 #![feature(box_patterns)]
-#![feature(box_syntax)]
 #![feature(proc_macro_span)]
 #![feature(if_let_guard)]
 #![feature(assert_matches)]

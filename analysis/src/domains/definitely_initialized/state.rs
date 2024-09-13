@@ -10,6 +10,7 @@ use prusti_rustc_interface::{
     middle::{mir, ty::TyCtxt},
     span::def_id::DefId,
 };
+use rustc_middle::mir::UnwindAction;
 use serde::{ser::SerializeSeq, Serialize, Serializer};
 use std::{collections::BTreeSet, fmt, mem};
 
@@ -214,8 +215,7 @@ impl<'mir, 'tcx: 'mir> DefinitelyInitializedState<'mir, 'tcx> {
                     | mir::Rvalue::Use(ref operand) => {
                         self.apply_operand_effect(operand, move_out_copy_types);
                     }
-                    mir::Rvalue::BinaryOp(_, box (ref operand1, ref operand2))
-                    | mir::Rvalue::CheckedBinaryOp(_, box (ref operand1, ref operand2)) => {
+                    mir::Rvalue::BinaryOp(_, box (ref operand1, ref operand2)) => {
                         self.apply_operand_effect(operand1, move_out_copy_types);
                         self.apply_operand_effect(operand2, move_out_copy_types);
                     }
@@ -291,11 +291,11 @@ impl<'mir, 'tcx: 'mir> DefinitelyInitializedState<'mir, 'tcx> {
                 ref args,
                 destination,
                 target,
-                cleanup,
+                unwind,
                 ..
             } => {
                 for arg in args.iter() {
-                    new_state.apply_operand_effect(arg, move_out_copy_types);
+                    new_state.apply_operand_effect(&arg.node, move_out_copy_types);
                 }
                 new_state.apply_operand_effect(func, move_out_copy_types);
                 if let Some(bb) = target {
@@ -303,7 +303,7 @@ impl<'mir, 'tcx: 'mir> DefinitelyInitializedState<'mir, 'tcx> {
                     res_vec.push((bb, new_state));
                 }
 
-                if let Some(bb) = cleanup {
+                if let UnwindAction::Cleanup(bb) = unwind {
                     // imprecision for error states
                     res_vec.push((bb, Self::new_top(self.def_id, self.mir, self.tcx)));
                 }
@@ -311,13 +311,13 @@ impl<'mir, 'tcx: 'mir> DefinitelyInitializedState<'mir, 'tcx> {
             mir::TerminatorKind::Assert {
                 ref cond,
                 target,
-                cleanup,
+                unwind,
                 ..
             } => {
                 new_state.apply_operand_effect(cond, move_out_copy_types);
                 res_vec.push((target, new_state));
 
-                if let Some(bb) = cleanup {
+                if let UnwindAction::Cleanup(bb) = unwind {
                     // imprecision for error states
                     res_vec.push((bb, Self::new_top(self.def_id, self.mir, self.tcx)));
                 }

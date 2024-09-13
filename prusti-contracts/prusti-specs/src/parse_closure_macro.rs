@@ -16,7 +16,7 @@ impl Parse for ClosureWithSpec {
 
         // collect and remove any specification attributes
         // leave other attributes intact
-        attrs.drain_filter(|attr| {
+        let _ = attrs.extract_if(|attr| {
             if let Some(id) = attr.path.get_ident() {
                 match id.to_string().as_ref() {
                     "requires" => pres.push(syn::parse2(attr.tokens.clone())),

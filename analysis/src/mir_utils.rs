@@ -9,6 +9,7 @@
 
 use log::trace;
 use prusti_rustc_interface::{
+    target::abi,
     data_structures::fx::FxHashSet,
     infer::infer::TyCtxtInferExt,
     middle::{
@@ -138,7 +139,7 @@ pub fn expand_struct_place<'tcx, P: PlaceImpl<'tcx> + std::marker::Copy>(
                 let variant = def.non_enum_variant();
                 for (index, field_def) in variant.fields.iter().enumerate() {
                     if Some(index) != without_field {
-                        let field = mir::Field::from_usize(index);
+                        let field = abi::FieldIdx::from_usize(index);
                         let field_place = tcx.mk_place_field(
                             place.to_mir_place(),
                             field,
@@ -151,7 +152,7 @@ pub fn expand_struct_place<'tcx, P: PlaceImpl<'tcx> + std::marker::Copy>(
             ty::Tuple(slice) => {
                 for (index, arg) in slice.iter().enumerate() {
                     if Some(index) != without_field {
-                        let field = mir::Field::from_usize(index);
+                        let field = abi::FieldIdx::from_usize(index);
                         let field_place = tcx.mk_place_field(place.to_mir_place(), field, arg);
                         places.push(P::from_mir_place(field_place));
                     }
@@ -166,18 +167,18 @@ pub fn expand_struct_place<'tcx, P: PlaceImpl<'tcx> + std::marker::Copy>(
                 }
             },
             ty::Closure(_, substs) => {
-                for (index, subst_ty) in substs.as_closure().upvar_tys().enumerate() {
+                for (index, subst_ty) in substs.as_closure().upvar_tys().into_iter().enumerate() {
                     if Some(index) != without_field {
-                        let field = mir::Field::from_usize(index);
+                        let field = abi::FieldIdx::from_usize(index);
                         let field_place = tcx.mk_place_field(place.to_mir_place(), field, subst_ty);
                         places.push(P::from_mir_place(field_place));
                     }
                 }
             }
-            ty::Generator(_, substs, _) => {
-                for (index, subst_ty) in substs.as_generator().upvar_tys().enumerate() {
+            ty::Coroutine(_, substs) => {
+                for (index, subst_ty) in substs.as_coroutine().upvar_tys().into_iter().enumerate() {
                     if Some(index) != without_field {
-                        let field = mir::Field::from_usize(index);
+                        let field = abi::FieldIdx::from_usize(index);
                         let field_place = tcx.mk_place_field(place.to_mir_place(), field, subst_ty);
                         places.push(P::from_mir_place(field_place));
                     }

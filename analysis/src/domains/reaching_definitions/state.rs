@@ -13,7 +13,7 @@ use prusti_rustc_interface::{
         fx::{FxHashMap, FxHashSet},
         stable_hasher::{HashStable, StableHasher},
     },
-    middle::{mir, ty::TyCtxt},
+    middle::{mir::{self, UnwindAction}, ty::TyCtxt},
 };
 use serde::{ser::SerializeMap, Serialize, Serializer};
 use std::{
@@ -128,7 +128,7 @@ impl<'mir, 'tcx: 'mir> ReachingDefsState<'mir, 'tcx> {
             mir::TerminatorKind::Call {
                 ref destination,
                 target,
-                cleanup,
+                unwind,
                 ..
             } => {
                 if let Some(bb) = target {
@@ -144,7 +144,7 @@ impl<'mir, 'tcx: 'mir> ReachingDefsState<'mir, 'tcx> {
                     res_vec.push((bb, dest_state));
                 }
 
-                if let Some(bb) = cleanup {
+                if let UnwindAction::Cleanup(bb) = unwind {
                     let mut cleanup_state = self.clone();
                     // error state -> be conservative & add destination as possible reaching def
                     // while keeping all others

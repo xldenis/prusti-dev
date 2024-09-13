@@ -13,7 +13,8 @@ use prusti_rustc_interface::{
     data_structures::fx::{FxHashMap, FxHashSet},
     middle::{mir, ty, ty::TyCtxt},
     span::source_map::SourceMap,
-    target::abi::VariantIdx,
+    target::abi::{VariantIdx, FieldIdx},
+
 };
 use serde::{ser::SerializeMap, Serialize, Serializer};
 use std::fmt;
@@ -229,6 +230,7 @@ fn pretty_print_place<'tcx>(
                 // It's not possible to move-out or borrow an individual element.
                 unreachable!()
             }
+            mir::ProjectionElem::Subtype(_) => todo!("Subtype projectio"),
         }
     }
 
@@ -239,12 +241,12 @@ fn pretty_print_place<'tcx>(
 fn describe_field_from_ty(
     tcx: TyCtxt<'_>,
     ty: ty::Ty<'_>,
-    field: mir::Field,
+    field: FieldIdx,
     variant_index: Option<VariantIdx>,
 ) -> Option<String> {
     if ty.is_box() {
         // If the type is a box, the field is described from the boxed type
-        describe_field_from_ty(tcx, ty.boxed_ty(), field, variant_index)
+        describe_field_from_ty(tcx, ty.boxed_ty().unwrap(), field, variant_index)
     } else {
         match *ty.kind() {
             ty::TyKind::Adt(def, _) => {
@@ -254,16 +256,16 @@ fn describe_field_from_ty(
                 } else {
                     def.non_enum_variant()
                 };
-                Some(variant.fields[field.index()].ident(tcx).to_string())
+                Some(variant.fields[field].ident(tcx).to_string())
             }
             ty::TyKind::Tuple(_) => Some(field.index().to_string()),
-            ty::TyKind::Ref(_, ty, _) | ty::TyKind::RawPtr(ty::TypeAndMut { ty, .. }) => {
+            ty::TyKind::Ref(_, ty, _) | ty::TyKind::RawPtr(ty, _) => {
                 describe_field_from_ty(tcx, ty, field, variant_index)
             }
             ty::TyKind::Array(ty, _) | ty::TyKind::Slice(ty) => {
                 describe_field_from_ty(tcx, ty, field, variant_index)
             }
-            ty::TyKind::Closure(..) | ty::TyKind::Generator(..) => {
+            ty::TyKind::Closure(..) | ty::TyKind::Coroutine(..) => {
                 // Supporting these cases is complex
                 None
             }

@@ -10,7 +10,7 @@ use crate::{
 };
 use log::{error, trace};
 use prusti_rustc_interface::{
-    borrowck::{consumers::RichLocation, BodyWithBorrowckFacts},
+    borrowck::consumers::{BodyWithBorrowckFacts, RichLocation},
     data_structures::fx::FxHashMap,
     middle::{mir, ty::TyCtxt},
 };
