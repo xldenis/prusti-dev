@@ -8,6 +8,7 @@ use crate::{
     abstract_interpretation::{AnalysisResult, FixpointEngine},
     domains::DefinitelyInitializedState,
 };
+use indexmap::IndexSet;
 use prusti_rustc_interface::{
     data_structures::fx::FxHashSet,
     middle::{mir, ty::TyCtxt},
@@ -57,7 +58,7 @@ impl<'mir, 'tcx: 'mir> FixpointEngine<'mir, 'tcx> for DefinitelyInitializedAnaly
     /// The bottom element of the lattice contains all possible places,
     /// meaning all locals (which includes all their fields)
     fn new_bottom(&self) -> Self::State {
-        let mut places = FxHashSet::default();
+        let mut places = IndexSet::default();
         for local in self.mir.local_decls.indices() {
             places.insert(local.into());
         }
@@ -71,7 +72,7 @@ impl<'mir, 'tcx: 'mir> FixpointEngine<'mir, 'tcx> for DefinitelyInitializedAnaly
 
     fn new_initial(&self) -> Self::State {
         // Top = empty set
-        let mut places = FxHashSet::default();
+        let mut places = IndexSet::default();
         // join/insert places in arguments
         // they are guaranteed to be disjoint and not prefixes of each other,
         // therefore insert them directly

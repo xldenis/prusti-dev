@@ -32,9 +32,9 @@ impl<'mir, 'tcx: 'mir> MaybeBorrowedAnalysis<'mir, 'tcx> {
         &self,
     ) -> AnalysisResult<PointwiseState<'mir, 'tcx, MaybeBorrowedState<'tcx>>> {
         let body = &self.body_with_facts.body;
-        let location_table = &self.body_with_facts.location_table;
-        let borrowck_in_facts = &self.body_with_facts.input_facts;
-        let borrowck_out_facts = self.body_with_facts.output_facts.as_ref();
+        let location_table = &self.body_with_facts.location_table.as_ref().unwrap();
+        let borrowck_in_facts = &self.body_with_facts.input_facts.as_ref().unwrap();
+        let borrowck_out_facts = self.body_with_facts.output_facts.as_ref().unwrap();
         let loan_issued_at = &borrowck_in_facts.loan_issued_at;
         let loan_live_at = &borrowck_out_facts.loan_live_at;
         let loan_issued_at_location: FxHashMap<_, mir::Location> = loan_issued_at

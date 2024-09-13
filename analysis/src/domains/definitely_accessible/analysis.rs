@@ -13,6 +13,7 @@ use crate::{
     mir_utils::remove_place_from_set,
     PointwiseState,
 };
+use indexmap::IndexSet;
 use prusti_rustc_interface::{
     borrowck::consumers::BodyWithBorrowckFacts,
     data_structures::fx::{FxHashMap, FxHashSet},
@@ -120,7 +121,7 @@ impl<'mir, 'tcx: 'mir> DefinitelyAccessibleAnalysis<'mir, 'tcx> {
         live_vars: &FxHashSet<mir::Local>,
     ) -> DefinitelyAccessibleState<'tcx> {
         let body = &self.body_with_facts.body;
-        let mut definitely_accessible: FxHashSet<_> = def_init.get_def_init_places().clone();
+        let mut definitely_accessible: IndexSet<_> = def_init.get_def_init_places().clone();
         for (local, local_decl) in body.local_decls.iter_enumerated() {
             let has_lifetimes = self.tcx.any_free_region_meets(&local_decl.ty, |_| true);
             let maybe_expired = !live_vars.contains(&local);

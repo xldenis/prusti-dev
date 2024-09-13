@@ -4,17 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::{
-    mir_utils::{is_prefix, Place},
-    PointwiseState,
-};
+use crate::{mir_utils::is_prefix, PointwiseState};
+use indexmap::IndexSet;
 use log::info;
 use prusti_rustc_interface::{
     data_structures::fx::{FxHashMap, FxHashSet},
     middle::{mir, ty, ty::TyCtxt},
     span::source_map::SourceMap,
-    target::abi::{VariantIdx, FieldIdx},
-
+    target::abi::{FieldIdx, VariantIdx},
 };
 use serde::{ser::SerializeMap, Serialize, Serializer};
 use std::fmt;
@@ -22,18 +19,18 @@ use std::fmt;
 #[derive(Clone, Default, Eq, PartialEq)]
 pub struct DefinitelyAccessibleState<'tcx> {
     /// Places that are definitely not moved-out nor blocked by a *mutable* reference.
-    pub(super) definitely_accessible: FxHashSet<Place<'tcx>>,
+    pub(super) definitely_accessible: IndexSet<mir::Place<'tcx>>,
     /// Places that are definitely not moved-out nor blocked by a *mutable or shared* reference.
     /// Considering pack/unpack operations, this should always be a subset of `definitely_accessible`.
-    pub(super) definitely_owned: FxHashSet<Place<'tcx>>,
+    pub(super) definitely_owned: IndexSet<mir::Place<'tcx>>,
 }
 
 impl<'tcx> DefinitelyAccessibleState<'tcx> {
-    pub fn get_definitely_accessible(&self) -> &FxHashSet<Place<'tcx>> {
+    pub fn get_definitely_accessible(&self) -> &IndexSet<mir::Place<'tcx>> {
         &self.definitely_accessible
     }
 
-    pub fn get_definitely_owned(&self) -> &FxHashSet<Place<'tcx>> {
+    pub fn get_definitely_owned(&self) -> &IndexSet<mir::Place<'tcx>> {
         &self.definitely_owned
     }
 
@@ -53,14 +50,14 @@ impl<'tcx> Serialize for DefinitelyAccessibleState<'tcx> {
     fn serialize<Se: Serializer>(&self, serializer: Se) -> Result<Se::Ok, Se::Error> {
         let mut seq = serializer.serialize_map(Some(2))?;
         let mut definitely_accessible_set: Vec<_> = self.definitely_accessible.iter().collect();
-        definitely_accessible_set.sort();
+        // definitely_accessible_set.sort();
         let mut definitely_accessible_strings = vec![];
         for &place in definitely_accessible_set {
             definitely_accessible_strings.push(format!("{place:?}"));
         }
         seq.serialize_entry("accessible", &definitely_accessible_strings)?;
         let mut definitely_owned_set: Vec<_> = self.definitely_owned.iter().collect();
-        definitely_owned_set.sort();
+        // definitely_owned_set.sort();
         let mut definitely_owned_strings = vec![];
         for &place in definitely_owned_set {
             definitely_owned_strings.push(format!("{place:?}"));
@@ -168,7 +165,7 @@ impl<'mir, 'tcx: 'mir> PointwiseState<'mir, 'tcx, DefinitelyAccessibleState<'tcx
 fn pretty_print_place<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mir::Body<'tcx>,
-    place: Place<'tcx>,
+    place: mir::Place<'tcx>,
 ) -> Option<String> {
     let mut pieces = vec![];
 

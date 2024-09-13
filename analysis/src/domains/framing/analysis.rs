@@ -105,7 +105,7 @@ impl<'mir, 'tcx: 'mir> Visitor<'tcx> for ComputeFramingState<'mir, 'tcx> {
     ) {
         let place = (*place).into();
         match context {
-            PlaceContext::NonMutatingUse(NonMutatingUseContext::UniqueBorrow) => todo!(),
+            // PlaceContext::NonMutatingUse(NonMutatingUseContext::) => todo!(),
             PlaceContext::MutatingUse(_)
             | PlaceContext::NonMutatingUse(NonMutatingUseContext::Move) => {
                 // No permission can be framed

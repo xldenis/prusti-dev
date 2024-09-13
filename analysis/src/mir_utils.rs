@@ -7,23 +7,24 @@
 //! Various helper functions for working with `mir` types.
 //! copied from prusti-interface/utils
 
+use indexmap::IndexSet;
 use log::trace;
 use prusti_rustc_interface::{
-    target::abi,
     data_structures::fx::FxHashSet,
     infer::infer::TyCtxtInferExt,
     middle::{
         mir,
         ty::{self, TyCtxt},
     },
+    target::abi,
     trait_selection::infer::InferCtxtExt,
 };
 use std::mem;
 
-#[repr(transparent)]
-#[derive(Clone, Copy, Eq, PartialEq, derive_more::From, Hash)]
+// #[repr(transparent)]
+// #[derive(Clone, Copy, Eq, PartialEq, derive_more::From, Hash)]
 /// A wrapper for `mir::Place` that implements `Ord`.
-pub struct Place<'tcx>(mir::Place<'tcx>);
+// pub struct Place<'tcx>(mir::Place<'tcx>);
 
 /// A trait enabling `Place` and `mir::Place` to be treated in the same way
 pub trait PlaceImpl<'tcx> {
@@ -31,48 +32,48 @@ pub trait PlaceImpl<'tcx> {
     fn to_mir_place(self) -> mir::Place<'tcx>;
 }
 
-impl<'tcx> From<mir::Local> for Place<'tcx> {
-    fn from(local: mir::Local) -> Self {
-        Self(local.into())
-    }
-}
+// impl<'tcx> From<mir::Local> for Place<'tcx> {
+//     fn from(local: mir::Local) -> Self {
+//         Self(local.into())
+//     }
+// }
 
-impl<'tcx> PartialOrd for Place<'tcx> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl<'tcx> PartialOrd for Place<'tcx> {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }
 
-impl<'tcx> Ord for Place<'tcx> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0
-            .local
-            .cmp(&other.0.local)
-            .then(self.0.projection.cmp(other.0.projection))
-    }
-}
+// impl<'tcx> Ord for Place<'tcx> {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         self.0
+//             .local
+//             .cmp(&other.0.local)
+//             .then(self.0.projection.iter().cmp(other.0.projection.iter()))
+//     }
+// }
 
-impl<'tcx> std::fmt::Debug for Place<'tcx> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
+// impl<'tcx> std::fmt::Debug for Place<'tcx> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         self.0.fmt(f)
+//     }
+// }
 
-impl<'tcx> std::ops::Deref for Place<'tcx> {
-    type Target = mir::Place<'tcx>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+// impl<'tcx> std::ops::Deref for Place<'tcx> {
+//     type Target = mir::Place<'tcx>;
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 
-impl<'tcx> PlaceImpl<'tcx> for Place<'tcx> {
-    fn from_mir_place(place: mir::Place<'tcx>) -> Place<'tcx> {
-        Place(place)
-    }
-    fn to_mir_place(self) -> mir::Place<'tcx> {
-        self.0
-    }
-}
+// impl<'tcx> PlaceImpl<'tcx> for Place<'tcx> {
+//     fn from_mir_place(place: mir::Place<'tcx>) -> Place<'tcx> {
+//         Place(place)
+//     }
+//     fn to_mir_place(self) -> mir::Place<'tcx> {
+//         self.0
+//     }
+// }
 
 impl<'tcx> PlaceImpl<'tcx> for mir::Place<'tcx> {
     fn from_mir_place(place: mir::Place<'tcx>) -> mir::Place<'tcx> {
@@ -101,7 +102,7 @@ pub fn location_to_stmt_str(location: mir::Location, mir: &mir::Body) -> String 
 /// +   `is_prefix(x.f, x.f) == true`
 /// +   `is_prefix(x.f.g, x.f) == true`
 /// +   `is_prefix(x.f, x.f.g) == false`
-pub(crate) fn is_prefix<'tcx>(place: Place<'tcx>, potential_prefix: Place<'tcx>) -> bool {
+pub(crate) fn is_prefix<'tcx>(place: mir::Place<'tcx>, potential_prefix: mir::Place<'tcx>) -> bool {
     if place.local != potential_prefix.local
         || place.projection.len() < potential_prefix.projection.len()
     {
@@ -198,17 +199,17 @@ pub fn expand_struct_place<'tcx, P: PlaceImpl<'tcx> + std::marker::Copy>(
 pub fn expand_one_level<'tcx>(
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
-    current_place: Place<'tcx>,
-    guide_place: Place<'tcx>,
-) -> (Place<'tcx>, Vec<Place<'tcx>>) {
+    current_place: mir::Place<'tcx>,
+    guide_place: mir::Place<'tcx>,
+) -> (mir::Place<'tcx>, Vec<mir::Place<'tcx>>) {
     let index = current_place.projection.len();
-    let new_projection = tcx.mk_place_elems(
-        current_place
-            .projection
-            .iter()
-            .chain([guide_place.projection[index]]),
-    );
-    let new_current_place = Place(mir::Place {
+    let place_elems: Vec<_> = current_place
+        .projection
+        .iter()
+        .chain([guide_place.projection[index]])
+        .collect();
+    let new_projection = tcx.mk_place_elems(&place_elems);
+    let new_current_place = (mir::Place {
         local: current_place.local,
         projection: new_projection,
     });
@@ -221,6 +222,7 @@ pub fn expand_one_level<'tcx>(
         | mir::ProjectionElem::ConstantIndex { .. }
         | mir::ProjectionElem::Subslice { .. }
         | mir::ProjectionElem::Downcast(..)
+        | mir::ProjectionElem::Subtype(_)
         | mir::ProjectionElem::OpaqueCast(..) => vec![],
     };
     (new_current_place, other_places)
@@ -237,9 +239,9 @@ pub fn expand_one_level<'tcx>(
 pub(crate) fn expand<'tcx>(
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
-    mut minuend: Place<'tcx>,
-    subtrahend: Place<'tcx>,
-) -> Vec<Place<'tcx>> {
+    mut minuend: mir::Place<'tcx>,
+    subtrahend: mir::Place<'tcx>,
+) -> Vec<mir::Place<'tcx>> {
     assert!(
         is_prefix(subtrahend, minuend),
         "The minuend must be the prefix of the subtrahend."
@@ -270,15 +272,15 @@ pub(crate) fn expand<'tcx>(
 pub(crate) fn collapse<'tcx>(
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
-    places: &mut FxHashSet<Place<'tcx>>,
-    guide_place: Place<'tcx>,
+    places: &mut IndexSet<mir::Place<'tcx>>,
+    guide_place: mir::Place<'tcx>,
 ) {
     fn recurse<'tcx>(
         mir: &mir::Body<'tcx>,
         tcx: TyCtxt<'tcx>,
-        places: &mut FxHashSet<Place<'tcx>>,
-        current_place: Place<'tcx>,
-        guide_place: Place<'tcx>,
+        places: &mut IndexSet<mir::Place<'tcx>>,
+        current_place: mir::Place<'tcx>,
+        guide_place: mir::Place<'tcx>,
     ) {
         if current_place != guide_place {
             let (new_current_place, mut expansion) =
@@ -300,8 +302,8 @@ pub(crate) fn collapse<'tcx>(
 pub fn remove_place_from_set<'tcx>(
     body: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
-    to_remove: Place<'tcx>,
-    set: &mut FxHashSet<Place<'tcx>>,
+    to_remove: mir::Place<'tcx>,
+    set: &mut IndexSet<mir::Place<'tcx>>,
 ) {
     let old_set = mem::take(set);
     for old_place in old_set {
@@ -343,7 +345,7 @@ pub fn is_copy<'tcx>(
 /// Given an assignment `let _ = & <borrowed_place>`, this function returns the place that is
 /// blocked by the loan.
 /// For example, `let _ = &x.f.g` blocks just `x.f.g`, but `let _ = &x.f[0].g` blocks `x.f`.
-pub fn get_blocked_place<'tcx>(tcx: TyCtxt<'tcx>, borrowed: Place<'tcx>) -> Place<'tcx> {
+pub fn get_blocked_place<'tcx>(tcx: TyCtxt<'tcx>, borrowed: mir::Place<'tcx>) -> mir::Place<'tcx> {
     for (place_ref, place_elem) in borrowed.iter_projections() {
         match place_elem {
             mir::ProjectionElem::Deref
@@ -352,12 +354,13 @@ pub fn get_blocked_place<'tcx>(tcx: TyCtxt<'tcx>, borrowed: Place<'tcx>) -> Plac
             | mir::ProjectionElem::Subslice { .. } => {
                 return (mir::Place {
                     local: place_ref.local,
-                    projection: tcx.intern_place_elems(place_ref.projection),
+                    projection: tcx.mk_place_elems(place_ref.projection),
                 })
                 .into();
             }
             mir::ProjectionElem::Field(..)
             | mir::ProjectionElem::Downcast(..)
+            | mir::ProjectionElem::Subtype(_)
             | mir::ProjectionElem::OpaqueCast(..) => {
                 // Continue
             }

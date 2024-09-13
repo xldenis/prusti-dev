@@ -4,28 +4,26 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::{
-    domains::DefinitelyAccessibleState,
-    mir_utils::{is_prefix, Place},
-};
-use prusti_rustc_interface::data_structures::fx::FxHashSet;
+use crate::{domains::DefinitelyAccessibleState, mir_utils::is_prefix};
+use indexmap::IndexSet;
+use prusti_rustc_interface::{data_structures::fx::FxHashSet, middle::mir};
 use serde::{ser::SerializeMap, Serialize, Serializer};
 use std::fmt;
 
 #[derive(Clone, Default, Eq, PartialEq)]
 pub struct FramingState<'tcx> {
     /// Places of `definitely_accessible` that can be framed across the *next* statement.
-    pub(super) framed_accessible: FxHashSet<Place<'tcx>>,
+    pub(super) framed_accessible: IndexSet<mir::Place<'tcx>>,
     /// Places of `definitely_owned` that can be framed across the *next* statement.
-    pub(super) framed_owned: FxHashSet<Place<'tcx>>,
+    pub(super) framed_owned: IndexSet<mir::Place<'tcx>>,
 }
 
 impl<'tcx> FramingState<'tcx> {
-    pub fn get_framed_accessible(&self) -> &FxHashSet<Place<'tcx>> {
+    pub fn get_framed_accessible(&self) -> &IndexSet<mir::Place<'tcx>> {
         &self.framed_accessible
     }
 
-    pub fn get_framed_owned(&self) -> &FxHashSet<Place<'tcx>> {
+    pub fn get_framed_owned(&self) -> &IndexSet<mir::Place<'tcx>> {
         &self.framed_owned
     }
 
@@ -66,14 +64,14 @@ impl<'tcx> Serialize for FramingState<'tcx> {
     fn serialize<Se: Serializer>(&self, serializer: Se) -> Result<Se::Ok, Se::Error> {
         let mut seq = serializer.serialize_map(Some(2))?;
         let mut definitely_accessible_set: Vec<_> = self.framed_accessible.iter().collect();
-        definitely_accessible_set.sort();
+        // definitely_accessible_set.sort();
         let mut definitely_accessible_strings = vec![];
         for &place in definitely_accessible_set {
             definitely_accessible_strings.push(format!("{place:?}"));
         }
         seq.serialize_entry("frame_accessible", &definitely_accessible_strings)?;
         let mut definitely_owned_set: Vec<_> = self.framed_owned.iter().collect();
-        definitely_owned_set.sort();
+        // definitely_owned_set.sort();
         let mut definitely_owned_strings = vec![];
         for &place in definitely_owned_set {
             definitely_owned_strings.push(format!("{place:?}"));
