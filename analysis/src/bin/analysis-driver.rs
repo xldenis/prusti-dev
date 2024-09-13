@@ -11,18 +11,22 @@ use analysis::{
         MaybeBorrowedAnalysis, ReachingDefsAnalysis,
     },
 };
+use prusti_rustc_interface::session::{config::ErrorOutputType, EarlyDiagCtxt};
 use prusti_rustc_interface::{
     ast::ast,
-    borrowck::BodyWithBorrowckFacts,
+    borrowck::{consumers::BodyWithBorrowckFacts},
     driver::Compilation,
     hir::def_id::{DefId, LocalDefId},
     interface::{interface, Config, Queries},
+        ast::Attribute,
     middle::{
+        mir::BorrowCheckResult,
         ty,
-        ty::query::{query_values::mir_borrowck, ExternProviders, Providers},
+
+        util::Providers,
     },
     polonius_engine::{Algorithm, Output},
-    session::{Attribute, Session},
+    session::{ Session},
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -36,7 +40,7 @@ fn get_attributes(
 ) -> &[prusti_rustc_interface::ast::ast::Attribute] {
     if let Some(local_def_id) = def_id.as_local() {
         tcx.hir()
-            .attrs(tcx.hir().local_def_id_to_hir_id(local_def_id))
+            .attrs(tcx.local_def_id_to_hir_id(local_def_id))
     } else {
         tcx.item_attrs(def_id)
     }
@@ -61,6 +65,7 @@ fn get_attribute<'tcx>(
                         },
                     args: ast::AttrArgs::Empty,
                     tokens: _,
+                    ..
                 } => {
                     segments.len() == 2
                         && segments[0].ident.as_str() == segment1
@@ -115,23 +120,23 @@ mod mir_storage {
 }
 
 #[allow(clippy::needless_lifetimes)]
-fn mir_borrowck<'tcx>(tcx: ty::TyCtxt<'tcx>, def_id: LocalDefId) -> mir_borrowck<'tcx> {
+fn mir_borrowck<'tcx>(tcx: ty::TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx BorrowCheckResult<'tcx> {
+    use prusti_rustc_interface::borrowck::consumers::ConsumerOptions;
+
+    let opts = ConsumerOptions::PoloniusOutputFacts;
     let body_with_facts = prusti_rustc_interface::borrowck::consumers::get_body_with_borrowck_facts(
-        tcx,
-        ty::WithOptConstParam::unknown(def_id),
+        tcx, def_id, opts,
     );
     // SAFETY: This is safe because we are feeding in the same `tcx` that is
     // going to be used as a witness when pulling out the data.
     unsafe {
         mir_storage::store_mir_body(tcx, def_id, body_with_facts);
     }
-    let mut providers = Providers::default();
-    prusti_rustc_interface::borrowck::provide(&mut providers);
-    let original_mir_borrowck = providers.mir_borrowck;
-    original_mir_borrowck(tcx, def_id)
+
+    (prusti_rustc_interface::interface::DEFAULT_QUERY_PROVIDERS.mir_borrowck)(tcx, def_id)
 }
 
-fn override_queries(_session: &Session, local: &mut Providers, _external: &mut ExternProviders) {
+fn override_queries(_session: &Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
 
@@ -147,8 +152,8 @@ impl prusti_rustc_interface::driver::Callbacks for OurCompilerCalls {
         compiler: &interface::Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        let session = compiler.session();
-        session.abort_if_errors();
+        let session = &compiler.sess;
+        session.dcx().abort_if_errors();
 
         let abstract_domain: &str = self
             .args
@@ -160,7 +165,7 @@ impl prusti_rustc_interface::driver::Callbacks for OurCompilerCalls {
 
         println!(
             "Analyzing file {} using {}...",
-            compiler.input().source_name().prefer_local(),
+            compiler.sess.io.input.source_name().prefer_local(),
             abstract_domain
         );
 
@@ -189,12 +194,12 @@ impl prusti_rustc_interface::driver::Callbacks for OurCompilerCalls {
                 // that was used to store the data.
                 let mut body_with_facts =
                     unsafe { self::mir_storage::retrieve_mir_body(tcx, local_def_id) };
-                body_with_facts.output_facts = Rc::new(Output::compute(
-                    &body_with_facts.input_facts,
+                body_with_facts.output_facts = Some(Rc::new(Output::compute(
+                    &body_with_facts.input_facts.as_ref().unwrap(),
                     Algorithm::Naive,
                     true,
-                ));
-                assert!(!body_with_facts.input_facts.cfg_edge.is_empty());
+                )));
+                assert!(!body_with_facts.input_facts.as_ref().unwrap().cfg_edge.is_empty());
                 let body = &body_with_facts.body;
 
                 match abstract_domain {
@@ -280,8 +285,9 @@ impl prusti_rustc_interface::driver::Callbacks for OurCompilerCalls {
 /// A abstract domain has to be provided by using '--analysis=' (without spaces), e.g.:
 /// --analysis=ReachingDefsState or --analysis=DefinitelyInitializedAnalysis
 fn main() {
+    let handler = EarlyDiagCtxt::new(ErrorOutputType::default());
     env_logger::init();
-    prusti_rustc_interface::driver::init_rustc_env_logger();
+    prusti_rustc_interface::driver::init_rustc_env_logger(&handler);
     let mut compiler_args = Vec::new();
     let mut callback_args = Vec::new();
     for arg in std::env::args() {
