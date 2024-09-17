@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    index::Idx,
+    abi,
     middle::{mir, ty},
 };
 

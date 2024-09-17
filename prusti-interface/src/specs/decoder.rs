@@ -6,7 +6,7 @@ use prusti_rustc_interface::{
     },
     serialize::{opaque, Decodable},
     session::StableCrateId,
-    span::{StableSourceFileId, BytePos, Span, SyntaxContext},
+    span::{BytePos, ExpnId, Symbol, Span, SpanDecoder, StableSourceFileId, SyntaxContext},
 };
 use rustc_hash::FxHashMap;
 
@@ -17,64 +17,21 @@ pub struct DefSpecsDecoder<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, data: &'a [u8]) -> Self {
-        DefSpecsDecoder {
-            opaque: opaque::MemDecoder::new(data, 0),
+    pub fn new(tcx: TyCtxt<'tcx>, data: &'a [u8]) -> io::Result<Self> {
+        Ok(DefSpecsDecoder {
+            opaque: opaque::MemDecoder::new(data, 0)?,
             tcx,
             ty_rcache: Default::default(),
-        }
-    }
-
-    fn def_path_hash_to_def_id(&self, hash: DefPathHash) -> DefId {
-        // Sanity check
-        let cstore = std::panic::AssertUnwindSafe(self.tcx.cstore_untracked());
-        let result = std::panic::catch_unwind(|| {
-            cstore.stable_crate_id_to_crate_num(hash.stable_crate_id())
-        });
-        if result.is_err() {
-            panic!("A compiled dependency is out of sync. Try deleting the target folder (`cargo clean`).")
-        }
-        // Get `DefId`
-        self.tcx.def_path_hash_to_def_id(hash, &mut || {
-            panic!("DefPathHash not found in the local crate")
         })
     }
 }
 
-// This impl makes sure that we get a runtime error when we try decode a
-// `DefIndex` that is not contained in a `DefId`. Such a case would be problematic
-// because we would not know how to transform the `DefIndex` to the current
-// context.
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for DefIndex {
-    fn decode(_: &mut DefSpecsDecoder<'a, 'tcx>) -> DefIndex {
-        panic!("trying to decode `DefIndex` outside the context of a `DefId`")
-    }
-}
-
-// Both the `CrateNum` and the `DefIndex` of a `DefId` can change in between two
-// compilation sessions. We use the `DefPathHash`, which is stable across
-// sessions, to map the old `DefId` to the new one.
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for DefId {
-    fn decode(d: &mut DefSpecsDecoder<'a, 'tcx>) -> Self {
-        let def_path_hash = DefPathHash::decode(d);
-        d.def_path_hash_to_def_id(def_path_hash)
-    }
-}
-
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for CrateNum {
-    fn decode(d: &mut DefSpecsDecoder<'a, 'tcx>) -> CrateNum {
-        let stable_id = StableCrateId::decode(d);
-        d.tcx.stable_crate_id_to_crate_num(stable_id)
-    }
-}
-
-// See https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/decoder/struct.DecodeContext.html
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for Span {
-    fn decode(s: &mut DefSpecsDecoder<'a, 'tcx>) -> Span {
-        let sm = s.tcx.sess.source_map();
+impl<'a, 'tcx> SpanDecoder for DefSpecsDecoder<'a, 'tcx> {
+    fn decode_span(&mut self) -> Span {
+        let sm = self.tcx.sess.source_map();
         let pos = [(); 2].map(|_| {
-            let ssfi = StableSourceFileId::decode(s);
-            let rel_bp = BytePos::decode(s);
+            let ssfi = StableSourceFileId::decode(self);
+            let rel_bp = BytePos::decode(self);
             sm.source_file_by_stable_id(ssfi)
                 // See comment in 'encoder.rs'
                 .map(|sf| sf.start_pos + rel_bp)
@@ -84,7 +41,41 @@ impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for Span {
         });
         Span::new(pos[0], pos[1], SyntaxContext::root(), None)
     }
+
+    fn decode_symbol(&mut self) -> Symbol {
+        todo!()
+    }
+
+    fn decode_expn_id(&mut self) -> ExpnId {
+        todo!()
+    }
+
+    fn decode_syntax_context(&mut self) -> SyntaxContext {
+        todo!()
+    }
+
+    fn decode_crate_num(&mut self) -> CrateNum {
+        let stable_id = StableCrateId::decode(self);
+        self.tcx.stable_crate_id_to_crate_num(stable_id)
+    }
+    fn decode_def_index(&mut self) -> DefIndex {
+        panic!("trying to decode `DefIndex` outside the context of a `DefId`")
+    }
+
+    // Both the `CrateNum` and the `DefIndex` of a `DefId` can change in between two
+    // compilation sessions. We use the `DefPathHash`, which is stable across
+    // sessions, to map the old `DefId` to the new one.
+    fn decode_def_id(&mut self) -> DefId {
+        let def_path_hash = DefPathHash::decode(self);
+        self.tcx
+            .def_path_hash_to_def_id(def_path_hash).unwrap()
+    }
+
+    fn decode_attr_id(&mut self) -> AttrId {
+        todo!()
+    }
 }
+
 
 implement_ty_decoder!(DefSpecsDecoder<'a, 'tcx>);
 
@@ -94,16 +85,6 @@ impl<'a, 'tcx> TyDecoder for DefSpecsDecoder<'a, 'tcx> {
 
     fn interner(&self) -> Self::I {
         self.tcx
-    }
-
-    #[inline]
-    fn peek_byte(&self) -> u8 {
-        self.opaque.data[self.opaque.position()]
-    }
-
-    #[inline]
-    fn position(&self) -> usize {
-        self.opaque.position()
     }
 
     fn cached_ty_for_shorthand<F>(&mut self, shorthand: usize, or_insert_with: F) -> Ty<'tcx>
@@ -123,7 +104,7 @@ impl<'a, 'tcx> TyDecoder for DefSpecsDecoder<'a, 'tcx> {
     where
         F: FnOnce(&mut Self) -> R,
     {
-        let new_opaque = opaque::MemDecoder::new(self.opaque.data, pos);
+        let new_opaque = self.opaque.split_at(pos);
         let old_opaque = std::mem::replace(&mut self.opaque, new_opaque);
         let r = f(self);
         self.opaque = old_opaque;

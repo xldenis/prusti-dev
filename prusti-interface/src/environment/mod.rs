@@ -146,7 +146,7 @@ impl<'tcx> Environment<'tcx> {
             let param_env = self.tcx().param_env(caller_def_id);
             if let Some(instance) = self
                 .tcx()
-                .resolve_instance(param_env.and((called_def_id, call_substs)))
+                .resolve_instance_raw(param_env.and((called_def_id, call_substs)))
                 .unwrap()
             {
                 self.tcx()

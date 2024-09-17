@@ -140,8 +140,8 @@ impl<'tcx> EnvQuery<'tcx> {
 
     /// Returns true iff `def_id` is an unsafe function.
     pub fn is_unsafe_function(self, def_id: impl IntoParam<ProcedureDefId>) -> bool {
-        self.tcx.fn_sig(def_id.into_param()).unsafety()
-            == prusti_rustc_interface::hir::Unsafety::Unsafe
+        self.tcx.fn_sig(def_id.into_param()).skip_binder().safety()
+            == prusti_rustc_interface::hir::Safety::Unsafe
     }
 
     /// Computes the signature of the function with subst applied.
@@ -151,12 +151,12 @@ impl<'tcx> EnvQuery<'tcx> {
         substs: GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
         let def_id = def_id.into_param();
-        let sig = if self.tcx.is_closure(def_id) {
+        let sig = if self.tcx.is_closure_like(def_id) {
             substs.as_closure().sig()
         } else {
-            self.tcx.fn_sig(def_id)
+            self.tcx.fn_sig(def_id).skip_binder()
         };
-        ty::Binder::dummy(sig).instantiate(self.tcx, substs)
+        ty::EarlyBinder::bind(sig).instantiate(self.tcx, substs)
     }
 
     /// Computes the signature of the function with subst applied and associated types resolved.
@@ -173,7 +173,7 @@ impl<'tcx> EnvQuery<'tcx> {
 
     /// Returns true iff `def_id` is a closure.
     pub fn is_closure(self, def_id: impl IntoParam<DefId>) -> bool {
-        self.tcx.is_closure(def_id.into_param())
+        self.tcx.is_closure_like(def_id.into_param())
     }
 
     // /// Returns the `DefId` of the corresponding trait method, if any.
@@ -246,12 +246,12 @@ impl<'tcx> EnvQuery<'tcx> {
         // more precisely. We can do this directly with `impl_method_substs`
         // because they contain the substs for the `impl` block as a prefix.
         let call_trait_substs =
-            ty::Binder::dummy(trait_ref.substs).instantiate(self.tcx, impl_method_substs);
+            ty::EarlyBinder::bind(trait_ref.args).instantiate(self.tcx, impl_method_substs);
         let impl_substs = self.identity_substs(impl_def_id);
-        let trait_method_substs = self.tcx.mk_substs(
-            call_trait_substs
+        let trait_method_substs = self.tcx.mk_args(
+            &call_trait_substs
                 .iter()
-                .chain(impl_method_substs.iter().skip(impl_substs.len())),
+                .chain(impl_method_substs.iter().skip(impl_substs.len())).collect::<Vec<_>>(),
         );
 
         // sanity check: do we now have the correct number of substs?
@@ -274,17 +274,16 @@ impl<'tcx> EnvQuery<'tcx> {
             debug!("Fetching implementations of method '{:?}' defined in trait '{}' with substs '{:?}'", proc_def_id, self.tcx.def_path_str(trait_id), substs);
             let infcx = self.tcx.infer_ctxt().build();
             let mut sc = SelectionContext::new(&infcx);
-            let trait_ref = self.tcx.mk_trait_ref(trait_id, substs);
+            let trait_ref = TraitRef::new(self.tcx, trait_id, substs);
             let obligation = Obligation::new(
                 self.tcx,
                 ObligationCause::dummy(),
                 // TODO(tymap): don't use reveal_all
                 ParamEnv::reveal_all(),
-                Binder::dummy(TraitPredicate {
+                TraitPredicate {
                     trait_ref,
-                    constness: BoundConstness::NotConst,
-                    polarity: ImplPolarity::Positive,
-                }),
+                    polarity: PredicatePolarity::Positive,
+                },
             );
             let result = sc.select(&obligation);
             match result {
@@ -329,14 +328,14 @@ impl<'tcx> EnvQuery<'tcx> {
             let param_env = self.tcx.param_env(caller_def_id.into_param());
             let instance = self
                 .tcx
-                .resolve_instance(param_env.and((called_def_id, clean_substs)))
+                .resolve_instance_raw(param_env.and((called_def_id, clean_substs)))
                 .ok()??;
             let resolved_def_id = instance.def_id();
             let resolved_substs = if resolved_def_id == called_def_id {
                 // if no trait resolution occurred, we can keep the non-erased substs
                 call_substs
             } else {
-                instance.substs
+                instance.args
             };
 
             Some((resolved_def_id, resolved_substs))
@@ -357,7 +356,7 @@ impl<'tcx> EnvQuery<'tcx> {
         let param_env = param_env.into_param(self.tcx);
         // Normalize the type to account for associated types
         let ty = self.resolve_assoc_types(ty, param_env);
-        let ty = self.tcx.erase_late_bound_regions(ty);
+        let ty = self.tcx.erase_regions(ty).skip_binder();
         ty.is_copy_modulo_regions(
             *self.tcx.at(prusti_rustc_interface::span::DUMMY_SP),
             param_env,
@@ -441,7 +440,7 @@ impl<'tcx> EnvQuery<'tcx> {
     /// The `param_env` should be passed as a `ProcedureDefId` which is
     /// then used to calculate the param env; i.e. the set of
     /// where-clauses that are in scope at this particular point.
-    pub fn resolve_assoc_types<T: ty::TypeFoldable<'tcx> + std::fmt::Debug + Copy>(
+    pub fn resolve_assoc_types<T: ty::TypeFoldable<TyCtxt<'tcx>> + std::fmt::Debug + Copy>(
         self,
         normalizable: T,
         param_env: impl IntoParamTcx<'tcx, ParamEnv<'tcx>>,
@@ -520,19 +519,19 @@ mod sealed {
     impl<'tcx> IntoParamTcx<'tcx, HirId> for OwnerId {
         #[inline(always)]
         fn into_param(self, tcx: TyCtxt<'tcx>) -> HirId {
-            tcx.hir().local_def_id_to_hir_id(self.def_id)
+            tcx.local_def_id_to_hir_id(self.def_id)
         }
     }
     impl<'tcx> IntoParamTcx<'tcx, HirId> for LocalDefId {
         #[inline(always)]
         fn into_param(self, tcx: TyCtxt<'tcx>) -> HirId {
-            tcx.hir().local_def_id_to_hir_id(self)
+            tcx.local_def_id_to_hir_id(self)
         }
     }
     impl<'tcx> IntoParamTcx<'tcx, LocalDefId> for HirId {
         #[inline(always)]
         fn into_param(self, tcx: TyCtxt<'tcx>) -> LocalDefId {
-            tcx.hir().local_def_id(self)
+            tcx.hir().enclosing_body_owner(self)
         }
     }
     impl<'tcx> IntoParamTcx<'tcx, ParamEnv<'tcx>> for DefId {

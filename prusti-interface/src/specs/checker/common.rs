@@ -81,7 +81,7 @@ impl<'tcx, T: NonSpecExprVisitor<'tcx>> Visitor<'tcx> for NonSpecExprVisitorWrap
         id: LocalDefId,
     ) {
         // Stop checking inside `prusti::spec_only` functions
-        let attrs = self.wrapped.tcx().hir().attrs(id);
+        let attrs = self.wrapped.tcx().item_attrs(id);
         if has_spec_only_attr(attrs) {
             return;
         }

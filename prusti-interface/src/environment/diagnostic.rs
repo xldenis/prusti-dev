@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 pub struct EnvDiagnostic<'tcx> {
     tcx: TyCtxt<'tcx>,
-    warn_buffer: RefCell<Vec<prusti_rustc_interface::errors::Diag>>,
+    warn_buffer: RefCell<Vec<prusti_rustc_interface::errors::Diag<'tcx>>>,
 }
 
 impl<'tcx> EnvDiagnostic<'tcx> {

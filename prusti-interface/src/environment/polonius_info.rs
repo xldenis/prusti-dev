@@ -28,6 +28,7 @@ use datafrog;
 use log::{debug, trace};
 use prusti_common::config;
 use prusti_rustc_interface::{
+    index::Idx,
     middle::{mir, ty},
     polonius_engine::{Algorithm, Output},
     span::{def_id::DefId, Span},
@@ -581,7 +582,7 @@ fn get_borrowed_places<'a, 'tcx: 'a>(
 
                 // slice creation involves an unsize pointer cast like &[i32; 3] -> &[i32]
                 &mir::Rvalue::Cast(
-                    mir::CastKind::Pointer(ty::adjustment::PointerCast::Unsize),
+                    mir::CastKind::PointerCoercion(ty::adjustment::PointerCoercion::Unsize),
                     ref operand,
                     ref cast_ty,
                 ) if cast_ty.is_slice_ref() => {
@@ -1974,7 +1975,7 @@ fn get_call_arguments(mir: &mir::Body<'_>, location: mir::Location) -> Vec<mir::
         mir::TerminatorKind::Call { ref args, .. } => {
             let mut reference_args = Vec::new();
             for arg in args {
-                match arg {
+                match arg.node {
                     mir::Operand::Copy(place) | mir::Operand::Move(place) => {
                         if place.projection.len() == 0 {
                             reference_args.push(place.local);

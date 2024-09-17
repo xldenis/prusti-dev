@@ -1,6 +1,6 @@
 use super::{SliceOrArrayRef, TupleItemsForTy};
 use prusti_rustc_interface::{
-    index::Idx,
+    abi,
     middle::{mir, ty},
 };
 
@@ -63,7 +63,7 @@ impl<'tcx> SplitAggregateAssignment<'tcx> for mir::Statement<'tcx> {
             mir::Rvalue::Use(_) | mir::Rvalue::Ref(_, _, _) => vec![(lhs, rhs)],
             // slice creation is ok
             mir::Rvalue::Cast(
-                mir::CastKind::Pointer(ty::adjustment::PointerCast::Unsize),
+                mir::CastKind::PointerCoercion(ty::adjustment::PointerCoercion::Unsize),
                 _,
                 cast_ty,
             ) if cast_ty.is_slice_ref() => vec![(lhs, rhs)],

@@ -13,27 +13,30 @@ use prusti_rustc_interface::{
     },
 };
 
-pub struct DefSpecsEncoder<'tcx> {
+pub struct DefSpecsEncoder<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     opaque: opaque::FileEncoder,
     type_shorthands: FxHashMap<Ty<'tcx>, usize>,
     predicate_shorthands: FxHashMap<PredicateKind<'tcx>, usize>,
     interpret_allocs: FxIndexSet<AllocId>,
+    hygiene_context: HygieneEncodeContext,
 }
 
 impl<'tcx> DefSpecsEncoder<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
-        DefSpecsEncoder {
+    pub fn new(tcx: TyCtxt<'tcx>, path: &Path) -> io::Result<Self> {
+        Ok(DefSpecsEncoder {
             tcx,
-            opaque: opaque::FileEncoder::new(),
+            opaque: opaque::FileEncoder::new(path)?,
             type_shorthands: Default::default(),
             predicate_shorthands: Default::default(),
             interpret_allocs: Default::default(),
-        }
+            hygiene_context: Default::default(),
+        })
     }
 
-    pub fn into_inner(self) -> Vec<u8> {
-        self.opaque.finish()
+    pub fn finish(mut self) -> Result<(), (PathBuf, Error)> {
+        self.opaque.finish()?;
+        Ok(())
     }
 }
 
@@ -63,8 +66,6 @@ impl<'tcx> Encoder for DefSpecsEncoder<'tcx> {
         emit_i8(i8);
 
         emit_bool(bool);
-        emit_f64(f64);
-        emit_f32(f32);
         emit_char(char);
         emit_str(&str);
         emit_raw_bytes(&[u8]);
@@ -73,16 +74,18 @@ impl<'tcx> Encoder for DefSpecsEncoder<'tcx> {
 
 impl<'tcx> SpanEncoder for DefSpecsEncoder<'tcx> {
     fn encode_span(&mut self, span: Span) {
-        let sm = span.tcx.sess.source_map();
-        for bp in [self.lo(), self.hi()] {
+        let sm = self.tcx.sess.source_map();
+        let local_crate_stable_id = tcx.stable_crate_id(LOCAL_CRATE);
+        for bp in [span.lo(), span.hi()] {
             let sf = sm.lookup_source_file(bp);
-            let ssfi = StableSourceFileId::new(&sf);
-            ssfi.encode(span);
+
+            let ssfi = StableSourceFileId::from_filename_for_export(&sf, local_crate_stable_id);
+            self.encode(ssi);
             // Not sure if this is the most stable way to encode a BytePos. If it fails
             // try finding a function in `SourceMap` or `SourceFile` instead. E.g. the
             // `bytepos_to_file_charpos` fn which returns `CharPos` (though there is
             // currently no fn mapping back to `BytePos` for decode)
-            (bp - sf.start_pos).encode(span);
+            self.encode(bp - sf.start_pos);
         }
     }
 

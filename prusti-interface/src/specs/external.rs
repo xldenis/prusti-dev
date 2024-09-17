@@ -12,7 +12,7 @@ use crate::{
     environment::{EnvDiagnostic, EnvName, EnvQuery, Environment},
     PrustiError,
 };
-use prusti_rustc_interface::middle::ty::subst::SubstsRef;
+use prusti_rustc_interface::middle::ty::GenericArgsRef;
 use prusti_specs::ExternSpecKind;
 use std::{
     cmp::{Eq, PartialEq},
@@ -141,7 +141,9 @@ impl<'tcx> ExternSpecResolver<'tcx> {
             spec_found: None,
         };
         visitor.visit_fn(fn_kind, fn_decl, body_id, span, id);
-        let current_def_id = id;
+        let current_def_id = id.to_def_id();
+        let tcx = self.env_query.tcx();
+
         if let Some((target_def_id, substs, span)) = visitor.spec_found {
             let extern_spec_decl =
                 ExternSpecDeclaration::from_method_call(target_def_id, substs, self.env_query);
@@ -180,11 +182,11 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                     let (resolved_gens, current_gens) = (
                         self.env_query
                             .identity_substs(resolved_def_id)
-                            .non_erasable_generics()
+                            .non_erasable_generics(tcx, current_def_id)
                             .count(),
                         self.env_query
                             .identity_substs(current_def_id)
-                            .non_erasable_generics()
+                            .non_erasable_generics(tcx, current_def_id)
                             .count(),
                     );
                     if resolved_gens != current_gens {

@@ -2,6 +2,7 @@ use prusti_rustc_interface::{
     metadata::creader::CStore,
     serialize::{Decodable, Encodable},
     span::DUMMY_SP,
+    session::config::OutputType,
 };
 use rustc_hash::FxHashMap;
 use std::{fs, io, path};
@@ -24,13 +25,11 @@ impl CrossCrateSpecs {
 
     fn export_specs(env: &Environment, def_spec: &DefSpecificationMap) {
         let outputs = env.tcx().output_filenames(());
-        // If we run `rustc` without the `--out-dir` flag set, then don't export specs
-        if outputs.out_directory.to_string_lossy() == "" {
-            return;
-        }
-        let target_filename = outputs
-            .out_directory
-            .join(format!("lib{}.specs", env.name.local_crate_filename()));
+
+        let metadata_filename = outputs.path(OutputType::Metadata);
+        let target_filename = out.as_path().to_owned();
+        let target_filename = path.with_extension("specs");
+
         if let Err(e) = Self::write_into_file(env, def_spec, &target_filename) {
             PrustiError::internal(
                 format!(
@@ -52,9 +51,9 @@ impl CrossCrateSpecs {
         // to get dependency crates, which doesn't ignore unused ones? Maybe:
         // https://doc.rust-lang.org/stable/nightly-rustc/rustc_metadata/creader/struct.CrateMetadataRef.html#method.dependencies
         for crate_num in env.tcx().crates(()) {
-            if let Some(extern_crate) = env.tcx().extern_crate(crate_num.as_def_id()) {
+            if let Some(extern_crate) = env.tcx().extern_crate(*crate_num) {
                 if extern_crate.is_direct() {
-                    let cs = cstore.crate_source_untracked(*crate_num);
+                    let cs = env.tcx().used_crate_source(cnum);
                     let mut source = cs.paths().next().unwrap().clone();
                     source.set_extension("specs");
                     if source.is_file() {
@@ -79,17 +78,15 @@ impl CrossCrateSpecs {
         env: &Environment,
         def_spec: &DefSpecificationMap,
         path: &path::PathBuf,
-    ) -> io::Result<usize> {
+    ) -> io::Result<()> {
         use std::io::Write;
-        let mut encoder = DefSpecsEncoder::new(env.tcx());
+        let _ = fs::File::create(path)?;
+        fs::create_dir_all(path.parent().unwrap())?;
+        let mut encoder = DefSpecsEncoder::new(env.tcx(), &path)?;
         def_spec.proc_specs.encode(&mut encoder);
         def_spec.type_specs.encode(&mut encoder);
         CrossCrateBodies::from(&env.body).encode(&mut encoder);
-
-        // Probably not needed; dir should already exist?
-        fs::create_dir_all(path.parent().unwrap())?;
-        let mut file = fs::File::create(path)?;
-        file.write(&encoder.into_inner())
+        encoder.finish()
     }
 
     fn import_from_file(
