@@ -6,7 +6,7 @@ use prusti_rustc_interface::{
     middle::{
         hir::map::Map,
         ty::{
-            self, subst::SubstsRef, Binder, BoundConstness, ImplPolarity, ParamEnv, TraitPredicate,
+            self, GenericArgsRef, Binder, BoundConstness, ImplPolarity, ParamEnv, TraitPredicate,
             TyCtxt,
         },
     },
@@ -148,7 +148,7 @@ impl<'tcx> EnvQuery<'tcx> {
     pub fn get_fn_sig(
         self,
         def_id: impl IntoParam<ProcedureDefId>,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
         let def_id = def_id.into_param();
         let sig = if self.tcx.is_closure(def_id) {
@@ -156,14 +156,14 @@ impl<'tcx> EnvQuery<'tcx> {
         } else {
             self.tcx.fn_sig(def_id)
         };
-        ty::EarlyBinder(sig).subst(self.tcx, substs)
+        ty::Binder::dummy(sig).instantiate(self.tcx, substs)
     }
 
     /// Computes the signature of the function with subst applied and associated types resolved.
     pub fn get_fn_sig_resolved(
         self,
         def_id: impl IntoParam<ProcedureDefId>,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
         caller_def_id: impl IntoParam<ProcedureDefId>,
     ) -> ty::PolyFnSig<'tcx> {
         let def_id = def_id.into_param();
@@ -197,8 +197,8 @@ impl<'tcx> EnvQuery<'tcx> {
     pub fn find_trait_method_substs(
         self,
         impl_method_def_id: impl IntoParam<ProcedureDefId>, // what are we calling?
-        impl_method_substs: SubstsRef<'tcx>,                // what are the substs on the call?
-    ) -> Option<(ProcedureDefId, SubstsRef<'tcx>)> {
+        impl_method_substs: GenericArgsRef<'tcx>,                // what are the substs on the call?
+    ) -> Option<(ProcedureDefId, GenericArgsRef<'tcx>)> {
         let impl_method_def_id = impl_method_def_id.into_param();
         let impl_def_id = self.tcx.impl_of_method(impl_method_def_id)?;
         let trait_ref = self.tcx.impl_trait_ref(impl_def_id)?.skip_binder();
@@ -246,7 +246,7 @@ impl<'tcx> EnvQuery<'tcx> {
         // more precisely. We can do this directly with `impl_method_substs`
         // because they contain the substs for the `impl` block as a prefix.
         let call_trait_substs =
-            ty::EarlyBinder(trait_ref.substs).subst(self.tcx, impl_method_substs);
+            ty::Binder::dummy(trait_ref.substs).instantiate(self.tcx, impl_method_substs);
         let impl_substs = self.identity_substs(impl_def_id);
         let trait_method_substs = self.tcx.mk_substs(
             call_trait_substs
@@ -266,7 +266,7 @@ impl<'tcx> EnvQuery<'tcx> {
     pub fn find_impl_of_trait_method_call(
         self,
         proc_def_id: impl IntoParam<ProcedureDefId>,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
     ) -> Option<ProcedureDefId> {
         // TODO(tymap): remove this method?
         let proc_def_id = proc_def_id.into_param();
@@ -318,8 +318,8 @@ impl<'tcx> EnvQuery<'tcx> {
         self,
         caller_def_id: impl IntoParam<ProcedureDefId>, // where are we calling from?
         called_def_id: impl IntoParam<ProcedureDefId>, // what are we calling?
-        call_substs: SubstsRef<'tcx>,
-    ) -> (ProcedureDefId, SubstsRef<'tcx>) {
+        call_substs: GenericArgsRef<'tcx>,
+    ) -> (ProcedureDefId, GenericArgsRef<'tcx>) {
         let called_def_id = called_def_id.into_param();
 
         (|| {
@@ -405,7 +405,7 @@ impl<'tcx> EnvQuery<'tcx> {
 
     /// Return the default substitutions for a particular item, i.e. where each
     /// generic maps to itself.
-    pub fn identity_substs(self, def_id: impl IntoParam<ProcedureDefId>) -> SubstsRef<'tcx> {
+    pub fn identity_substs(self, def_id: impl IntoParam<ProcedureDefId>) -> GenericArgsRef<'tcx> {
         ty::List::identity_for_item(self.tcx, def_id.into_param())
     }
 

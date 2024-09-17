@@ -2,6 +2,7 @@ use crate::{environment::Environment, utils::has_spec_only_attr, PrustiError};
 use prusti_rustc_interface::{
     hir::{
         self as hir,
+        def_id::LocalDefId,
         intravisit::{self, Visitor},
     },
     middle::{hir::map::Map, ty::TyCtxt},
@@ -77,7 +78,7 @@ impl<'tcx, T: NonSpecExprVisitor<'tcx>> Visitor<'tcx> for NonSpecExprVisitorWrap
         fd: &'tcx hir::FnDecl<'tcx>,
         b: hir::BodyId,
         _s: Span,
-        id: hir::HirId,
+        id: LocalDefId,
     ) {
         // Stop checking inside `prusti::spec_only` functions
         let attrs = self.wrapped.tcx().hir().attrs(id);

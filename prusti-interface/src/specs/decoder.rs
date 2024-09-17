@@ -6,7 +6,7 @@ use prusti_rustc_interface::{
     },
     serialize::{opaque, Decodable},
     session::StableCrateId,
-    span::{source_map::StableSourceFileId, BytePos, Span, SyntaxContext},
+    span::{StableSourceFileId, BytePos, Span, SyntaxContext},
 };
 use rustc_hash::FxHashMap;
 

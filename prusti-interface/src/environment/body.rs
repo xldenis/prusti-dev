@@ -4,7 +4,7 @@ use prusti_rustc_interface::{
     macros::{TyDecodable, TyEncodable},
     middle::{
         mir,
-        ty::{self, subst::SubstsRef, TyCtxt},
+        ty::{self, GenericArgsRef, TyCtxt},
     },
     span::def_id::{DefId, LocalDefId},
 };
@@ -80,7 +80,7 @@ impl<'tcx> PreLoadedBodies<'tcx> {
 /// - we are encoding an impure function, where the method is encoded only once
 ///   and calls are performed indirectly via contract exhale/inhale; or
 /// - when the caller is unknown, e.g. to check a pure function definition.
-type MonomorphKey<'tcx> = (DefId, SubstsRef<'tcx>, Option<DefId>);
+type MonomorphKey<'tcx> = (DefId, GenericArgsRef<'tcx>, Option<DefId>);
 
 /// Store for all the `mir::Body` which we've taken out of the compiler
 /// or imported from external crates, all of which are indexed by DefId
@@ -147,7 +147,7 @@ impl<'tcx> EnvBody<'tcx> {
     fn get_monomorphised(
         &self,
         def_id: DefId,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
         caller_def_id: Option<DefId>,
     ) -> Option<MirBody<'tcx>> {
         self.monomorphised_bodies
@@ -158,7 +158,7 @@ impl<'tcx> EnvBody<'tcx> {
     fn set_monomorphised(
         &self,
         def_id: DefId,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
         caller_def_id: Option<DefId>,
         body: MirBody<'tcx>,
     ) -> MirBody<'tcx> {
@@ -192,7 +192,7 @@ impl<'tcx> EnvBody<'tcx> {
 
     /// Get the MIR body of a local impure function, monomorphised
     /// with the given type substitutions.
-    pub fn get_impure_fn_body(&self, def_id: LocalDefId, substs: SubstsRef<'tcx>) -> MirBody<'tcx> {
+    pub fn get_impure_fn_body(&self, def_id: LocalDefId, substs: GenericArgsRef<'tcx>) -> MirBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id.to_def_id(), substs, None) {
             return body;
         }
@@ -213,7 +213,7 @@ impl<'tcx> EnvBody<'tcx> {
     pub fn get_closure_body(
         &self,
         def_id: LocalDefId,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
         caller_def_id: DefId,
     ) -> MirBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id.to_def_id(), substs, Some(caller_def_id))
@@ -229,7 +229,7 @@ impl<'tcx> EnvBody<'tcx> {
     pub fn get_pure_fn_body(
         &self,
         def_id: DefId,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
         caller_def_id: DefId,
     ) -> MirBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id, substs, Some(caller_def_id)) {
@@ -244,7 +244,7 @@ impl<'tcx> EnvBody<'tcx> {
     pub fn get_expression_body(
         &self,
         def_id: DefId,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
         caller_def_id: DefId,
     ) -> MirBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id, substs, Some(caller_def_id)) {
@@ -262,7 +262,7 @@ impl<'tcx> EnvBody<'tcx> {
     pub fn get_spec_body(
         &self,
         def_id: DefId,
-        substs: SubstsRef<'tcx>,
+        substs: GenericArgsRef<'tcx>,
         caller_def_id: DefId,
     ) -> MirBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id, substs, Some(caller_def_id)) {

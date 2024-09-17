@@ -77,6 +77,11 @@ impl PlaceRegions {
                         not supported"
                         .to_string(),
                 )),
+                mir::ProjectionElem::Subtyppe(..) => Err(PlaceRegionsError::Unsupported(
+                    "determining the subtype is \
+                        not supported"
+                        .to_string(),
+                )),
             })
             .collect::<Result<_, _>>()?;
         Ok((place.local, indices))

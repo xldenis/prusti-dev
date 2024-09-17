@@ -1,7 +1,7 @@
 use prusti_rustc_interface::{
     errors::MultiSpan,
     hir::{
-        def_id::DefId,
+        def_id::{DefId, LocalDefId},
         intravisit::{self, Visitor},
     },
     middle::hir::map::Map,
@@ -133,7 +133,7 @@ impl<'tcx> ExternSpecResolver<'tcx> {
         fn_decl: &'tcx prusti_rustc_interface::hir::FnDecl,
         body_id: prusti_rustc_interface::hir::BodyId,
         span: Span,
-        id: prusti_rustc_interface::hir::hir_id::HirId,
+        id: LocalDefId,
         extern_spec_kind: ExternSpecKind,
     ) {
         let mut visitor = ExternSpecVisitor {
@@ -141,7 +141,7 @@ impl<'tcx> ExternSpecResolver<'tcx> {
             spec_found: None,
         };
         visitor.visit_fn(fn_kind, fn_decl, body_id, span, id);
-        let current_def_id = self.env_query.as_local_def_id(id).to_def_id();
+        let current_def_id = id;
         if let Some((target_def_id, substs, span)) = visitor.spec_found {
             let extern_spec_decl =
                 ExternSpecDeclaration::from_method_call(target_def_id, substs, self.env_query);
@@ -316,7 +316,7 @@ impl<'tcx> Visitor<'tcx> for ExternSpecVisitor<'tcx> {
         if let prusti_rustc_interface::hir::ExprKind::Call(callee_expr, _arguments) = ex.kind {
             if let prusti_rustc_interface::hir::ExprKind::Path(ref qself) = callee_expr.kind {
                 let tyck_res = self.env_query.tcx().typeck(callee_expr.hir_id.owner.def_id);
-                let substs = tyck_res.node_substs(callee_expr.hir_id);
+                let substs = tyck_res.node_args(callee_expr.hir_id);
                 let res = tyck_res.qpath_res(qself, callee_expr.hir_id);
                 if let prusti_rustc_interface::hir::def::Res::Def(_, def_id) = res {
                     self.spec_found = Some((def_id, substs, ex.span));

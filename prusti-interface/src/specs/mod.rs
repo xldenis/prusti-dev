@@ -11,8 +11,10 @@ use prusti_rustc_interface::{
     ast::ast,
     errors::MultiSpan,
     hir::{
+        self,
         def_id::{DefId, LocalDefId},
-        intravisit, FnRetTy,
+        intravisit::{self, Map as _},
+        FnRetTy,
     },
     middle::{hir::map::Map, ty},
     span::Span,
@@ -407,11 +409,11 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
         fn_decl: &'tcx prusti_rustc_interface::hir::FnDecl,
         body_id: prusti_rustc_interface::hir::BodyId,
         span: Span,
-        id: prusti_rustc_interface::hir::hir_id::HirId,
+        id: LocalDefId,
     ) {
         intravisit::walk_fn(self, fn_kind, fn_decl, body_id, id);
 
-        let local_id = self.env.query.as_local_def_id(id);
+        let local_id = id;
         let def_id = local_id.to_def_id();
         let attrs = self.env.query.get_local_attributes(id);
 
@@ -435,8 +437,11 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
             if has_prusti_attr(attrs, "type_invariant_spec") {
                 let self_id = fn_decl.inputs[0].hir_id;
                 let hir = self.env.query.hir();
-                let impl_id = hir.parent_id(hir.parent_id(self_id));
-                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
+                let impl_id = self
+                    .env
+                    .tcx()
+                    .parent_hir_id(self.env.tcx().parent_hir_id(self_id));
+                let type_id = get_type_id_from_impl_node(hir.hir_node(impl_id)).unwrap();
                 self.type_specs
                     .entry(type_id.as_local().unwrap())
                     .or_default()
@@ -448,8 +453,11 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
             if has_prusti_attr(attrs, "trusted_type") {
                 let self_id = fn_decl.inputs[0].hir_id;
                 let hir = self.env.query.hir();
-                let impl_id = hir.parent_id(hir.parent_id(self_id));
-                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
+                let impl_id = self
+                    .env
+                    .tcx()
+                    .parent_hir_id(self.env.tcx().parent_hir_id(self_id));
+                let type_id = get_type_id_from_impl_node(hir.hir_node(impl_id)).unwrap();
                 self.type_specs
                     .entry(type_id.as_local().unwrap())
                     .or_default()
@@ -461,8 +469,11 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                 let self_id = fn_decl.inputs[0].hir_id;
                 let name = read_prusti_attr("counterexample_print", attrs);
                 let hir = self.env.query.hir();
-                let impl_id = hir.parent_id(hir.parent_id(self_id));
-                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
+                let impl_id = self
+                    .env
+                    .tcx()
+                    .parent_hir_id(self.env.tcx().parent_hir_id(self_id));
+                let type_id = get_type_id_from_impl_node(hir.hir_node(impl_id)).unwrap();
                 self.type_specs
                     .entry(type_id.as_local().unwrap())
                     .or_default()
@@ -504,19 +515,22 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
             // Collect model type flag
             if has_to_model_fn_attr(attrs) {
                 if let FnRetTy::Return(ty) = fn_decl.output {
-                    if let Some(node) = self.env.query.hir().find(ty.hir_id) {
-                        if let Some(model_ty_id) =
-                            get_type_id_from_ty_node(node).and_then(|x| x.as_local())
-                        {
-                            if let Some(attr) = read_prusti_attr("type_models_to_model_fn", attrs) {
-                                let self_id = fn_decl.inputs[0].hir_id;
-                                let hir = self.env.query.hir();
-                                let impl_id = hir.parent_id(hir.parent_id(self_id));
-                                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
-                                if let Some(local_id) = type_id.as_local() {
-                                    self.type_specs.entry(local_id).or_default().model =
-                                        Some((attr, model_ty_id));
-                                }
+                    let node = self.env.query.hir().hir_node(ty.hir_id);
+                    if let Some(model_ty_id) =
+                        get_type_id_from_ty_node(node).and_then(|x| x.as_local())
+                    {
+                        if let Some(attr) = read_prusti_attr("type_models_to_model_fn", attrs) {
+                            let self_id = fn_decl.inputs[0].hir_id;
+                            let hir = self.env.query.hir();
+                            let impl_id = self
+                                .env
+                                .tcx()
+                                .parent_hir_id(self.env.tcx().parent_hir_id(self_id));
+                            let type_id =
+                                get_type_id_from_impl_node(hir.hir_node(impl_id)).unwrap();
+                            if let Some(local_id) = type_id.as_local() {
+                                self.type_specs.entry(local_id).or_default().model =
+                                    Some((attr, model_ty_id));
                             }
                         }
                     }
@@ -529,7 +543,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
         intravisit::walk_stmt(self, stmt);
 
         // Collect closure specifications
-        if let prusti_rustc_interface::hir::StmtKind::Local(local) = stmt.kind {
+        if let prusti_rustc_interface::hir::StmtKind::Let(local) = stmt.kind {
             let attrs = self.env.query.get_local_attributes(local.hir_id);
             if has_prusti_attr(attrs, "closure") {
                 let init_expr = local.init.expect("closure on Local without assignment");

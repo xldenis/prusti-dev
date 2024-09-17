@@ -1,6 +1,6 @@
 use super::{SliceOrArrayRef, TupleItemsForTy};
 use prusti_rustc_interface::{
-    index::vec::Idx,
+    index::Idx,
     middle::{mir, ty},
 };
 
@@ -53,7 +53,7 @@ impl<'tcx> SplitAggregateAssignment<'tcx> for mir::Statement<'tcx> {
                     .zip(items_ty.into_iter())
                     .enumerate()
                     .map(|(i, (rhs, ty))| {
-                        let field = mir::Field::new(i);
+                        let field = abi::FieldIdx::new(i);
                         let lhs = tcx.mk_place_field(local.into(), field, ty);
                         let rhs = mir::Rvalue::Use(rhs);
                         (lhs, rhs)
@@ -74,7 +74,7 @@ impl<'tcx> SplitAggregateAssignment<'tcx> for mir::Statement<'tcx> {
         atomic_assignments
             .into_iter()
             .map(|(lhs, rhs)| {
-                let kind = mir::StatementKind::Assign(box (lhs, rhs));
+                let kind = mir::StatementKind::Assign(Box::new((lhs, rhs)));
                 mir::Statement { source_info, kind }
             })
             .collect()

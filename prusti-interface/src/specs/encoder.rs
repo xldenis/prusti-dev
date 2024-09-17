@@ -6,12 +6,16 @@ use prusti_rustc_interface::{
         ty::{self, codec::TyEncoder, PredicateKind, Ty, TyCtxt},
     },
     serialize::{opaque, Encodable, Encoder},
-    span::{source_map::StableSourceFileId, Span},
+    span::{SpanEncoder,
+        hygiene::{raw_encode_syntax_context, HygieneEncodeContext},
+        StableSourceFileId,
+        ExpnId, SourceFile, Span, Symbol, SyntaxContext,
+    },
 };
 
 pub struct DefSpecsEncoder<'tcx> {
     tcx: TyCtxt<'tcx>,
-    opaque: opaque::MemEncoder,
+    opaque: opaque::FileEncoder,
     type_shorthands: FxHashMap<Ty<'tcx>, usize>,
     predicate_shorthands: FxHashMap<PredicateKind<'tcx>, usize>,
     interpret_allocs: FxIndexSet<AllocId>,
@@ -21,7 +25,7 @@ impl<'tcx> DefSpecsEncoder<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         DefSpecsEncoder {
             tcx,
-            opaque: opaque::MemEncoder::new(),
+            opaque: opaque::FileEncoder::new(),
             type_shorthands: Default::default(),
             predicate_shorthands: Default::default(),
             interpret_allocs: Default::default(),
@@ -67,38 +71,37 @@ impl<'tcx> Encoder for DefSpecsEncoder<'tcx> {
     }
 }
 
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for DefId {
-    fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
-        s.tcx.def_path_hash(*self).encode(s)
-    }
-}
-
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for DefIndex {
-    fn encode(&self, _: &mut DefSpecsEncoder<'tcx>) {
-        panic!("encoding `DefIndex` without context");
-    }
-}
-
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for CrateNum {
-    fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
-        s.tcx.stable_crate_id(*self).encode(s)
-    }
-}
-
-// See https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/encoder/struct.EncodeContext.html
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for Span {
-    fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
-        let sm = s.tcx.sess.source_map();
+impl<'tcx> SpanEncoder for DefSpecsEncoder<'tcx> {
+    fn encode_span(&mut self, span: Span) {
+        let sm = span.tcx.sess.source_map();
         for bp in [self.lo(), self.hi()] {
             let sf = sm.lookup_source_file(bp);
             let ssfi = StableSourceFileId::new(&sf);
-            ssfi.encode(s);
+            ssfi.encode(span);
             // Not sure if this is the most stable way to encode a BytePos. If it fails
             // try finding a function in `SourceMap` or `SourceFile` instead. E.g. the
             // `bytepos_to_file_charpos` fn which returns `CharPos` (though there is
             // currently no fn mapping back to `BytePos` for decode)
-            (bp - sf.start_pos).encode(s);
+            (bp - sf.start_pos).encode(span);
         }
+    }
+
+    fn encode_expn_id(&mut self, eid: ExpnId) {
+        self.hygiene_context.schedule_expn_data_for_encoding(eid);
+        eid.krate.encode(self);
+        eid.local_id.as_u32().encode(self);
+    }
+    fn encode_syntax_context(&mut self, ctx: SyntaxContext) {
+        raw_encode_syntax_context(ctx, &self.hygiene_context, self);
+    }
+    fn encode_crate_num(&mut self, cnum: CrateNum) {
+        self.tcx.stable_crate_id(cnum).encode(self)
+    }
+    fn encode_def_index(&mut self, _: DefIndex) {
+        panic!("encoding `DefIndex` without context");
+    }
+    fn encode_def_id(&mut self, id: DefId) {
+        self.tcx.def_path_hash(id).encode(self)
     }
 }
 

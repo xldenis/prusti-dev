@@ -28,7 +28,6 @@ use datafrog;
 use log::{debug, trace};
 use prusti_common::config;
 use prusti_rustc_interface::{
-    index::vec::Idx,
     middle::{mir, ty},
     polonius_engine::{Algorithm, Output},
     span::{def_id::DefId, Span},

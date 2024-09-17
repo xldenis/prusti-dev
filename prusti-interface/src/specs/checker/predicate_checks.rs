@@ -7,7 +7,7 @@ use crate::{
 use log::debug;
 use prusti_rustc_interface::{
     errors::MultiSpan,
-    hir::{self as hir, def_id::DefId, intravisit},
+    hir::{self as hir, def_id::{DefId, LocalDefId}, intravisit},
     middle::{hir::map::Map, ty::TyCtxt},
     span::Span,
 };
@@ -106,12 +106,12 @@ impl<'tcx> intravisit::Visitor<'tcx> for CollectPredicatesVisitor<'tcx> {
         fd: &'tcx hir::FnDecl<'tcx>,
         b: hir::BodyId,
         s: Span,
-        id: hir::HirId,
+        id: LocalDefId,
     ) {
         // collect this fn's DefId if predicate function
         let attrs = self.env_query.get_local_attributes(id);
         if has_prusti_attr(attrs, "pred_spec_id_ref") {
-            let def_id = self.env_query.as_local_def_id(id).to_def_id();
+            let def_id = id.to_def_id();
             self.predicates.insert(def_id, s);
         }
 

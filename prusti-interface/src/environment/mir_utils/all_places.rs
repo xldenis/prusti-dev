@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    index::vec::Idx,
+    index::Idx,
     middle::{mir, ty},
 };
 
@@ -16,7 +16,7 @@ impl<'tcx> AllPlaces<'tcx> for mir::Local {
         let ty = mir.local_decls[self].ty;
         if let ty::TyKind::Tuple(types) = ty.kind() {
             for (i, ty) in types.iter().enumerate() {
-                let field = mir::Field::new(i);
+                let field = abi::FieldIdx::new(i);
                 let place = tcx.mk_place_field(self.into(), field, ty);
                 places.push(place);
             }

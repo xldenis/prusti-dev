@@ -59,7 +59,7 @@ pub fn try_pop_one_level<'tcx>(
         let last_index = place.projection.len() - 1;
         let new_place = mir::Place {
             local: place.local,
-            projection: tcx.intern_place_elems(&place.projection[..last_index]),
+            projection: tcx.mk_place_elems(&place.projection[..last_index]),
         };
         Some((place.projection[last_index], new_place))
     } else {
@@ -208,6 +208,7 @@ pub fn has_prusti_attr(attrs: &[ast::Attribute], name: &str) -> bool {
                         segments,
                         tokens: _,
                     },
+                unsafety: _,
                 args: _,
                 tokens: _,
             } = &normal_attr.item;
@@ -265,6 +266,7 @@ pub fn read_prusti_attrs<T: Borrow<ast::Attribute>>(attr_name: &str, attrs: &[T]
                         segments,
                         tokens: _,
                     },
+                unsafety: _,
                 args: ast::AttrArgs::Eq(_, ast::AttrArgsEq::Hir(token_lit)),
                 tokens: _,
             } = &normal_attr.item

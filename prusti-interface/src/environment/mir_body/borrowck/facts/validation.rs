@@ -1,5 +1,5 @@
 use super::{AllInputFacts, LocationTable, RichLocation};
-use prusti_rustc_interface::{data_structures::graph::WithSuccessors, middle::mir};
+use prusti_rustc_interface::{data_structures::graph::Successors, middle::mir};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Validate that the input facts match the body.
