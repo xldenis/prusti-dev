@@ -1,6 +1,5 @@
 use mir_state_analysis::{
-    free_pcs::{CapabilityKind, FreePcsAnalysis, FreePcsBasicBlock, FreePcsLocation, RepackOp},
-    utils::Place,
+    borrows::engine::BorrowsDomain, free_pcs::{CapabilityKind, FreePcsAnalysis, FreePcsBasicBlock, FreePcsLocation, RepackOp}, utils::Place, FpcsOutput, ReborrowBridge
 };
 use prusti_interface::PrustiError;
 use prusti_rustc_interface::{
@@ -116,13 +115,13 @@ pub struct ImpureEncVisitor<'vir, 'enc, E: TaskEncoder>
     pub def_id: DefId,
     pub local_decls: &'enc mir::LocalDecls<'vir>,
     //ssa_analysis: SsaAnalysis,
-    pub fpcs_analysis: FreePcsAnalysis<'enc, 'vir>,
+    pub fpcs_analysis: FpcsOutput<'enc, 'vir>,
     pub local_defs: crate::encoders::MirLocalDefEncOutput<'vir>,
 
     pub tmp_ctr: usize,
 
     // for the current basic block
-    pub current_fpcs: Option<FreePcsBasicBlock<'vir>>,
+    pub current_fpcs: Option<FreePcsBasicBlock<'vir, BorrowsDomain<'enc, 'vir>, ReborrowBridge<'vir>>>,
 
     pub current_stmts: Option<Vec<vir::Stmt<'vir>>>,
     pub current_terminator: Option<vir::TerminatorStmt<'vir>>,
@@ -236,7 +235,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     fn collect_terminator_repacks(
         &mut self,
         idx: usize,
-        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b>) -> &'a [RepackOp<'b>],
+        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b, BorrowsDomain<'a, 'b>, ReborrowBridge<'b>>) -> &'a [RepackOp<'b>],
     ) -> Vec<&'vir vir::StmtData<'vir>> {
         let current_stmts = self.current_stmts.take();
         self.current_stmts = Some(Vec::new());
@@ -298,7 +297,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     fn fpcs_repacks_location(
         &mut self,
         location: mir::Location,
-        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b>) -> &'a [RepackOp<'b>],
+        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b, BorrowsDomain<'a, 'b>, ReborrowBridge<'b>>) -> &'a [RepackOp<'b>],
     ) {
         let current_fpcs = self.current_fpcs.take().unwrap();
         let repacks = repacks(&current_fpcs.statements[location.statement_index]);
@@ -309,7 +308,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     fn fpcs_repacks_terminator(
         &mut self,
         succ_idx: usize,
-        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b>) -> &'a [RepackOp<'b>],
+        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b, BorrowsDomain<'a, 'b>, ReborrowBridge<'b>>) -> &'a [RepackOp<'b>],
     ) {
         let current_fpcs = self.current_fpcs.take().unwrap();
         let repacks = repacks(&current_fpcs.terminator.succs[succ_idx]);
